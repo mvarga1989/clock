@@ -1,747 +1,450 @@
 <!DOCTYPE html>
-<html >
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="user-scalable=no">
-  <meta name="mobile-web-app-capable" content="yes">
-  <title>Clock</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/5.0.0/normalize.min.css">
-  <link rel='stylesheet prefetch' href='https://cdn.jsdelivr.net/foundation/5.5.0/css/foundation.css'>
-  <link rel="stylesheet" href="css/common.css">
-  <link rel="stylesheet" media="all and (orientation:portrait)" href="css/portrait.css">
-  <link rel="stylesheet" media="all and (orientation:landscape)" href="css/landscape.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A minimalist clock for meditation: a single sweeping point of focus that keeps your screen awake.">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Meditation Clock</title>
+<style>
+  :root {
+    --bg: #000000;
+    --amber: #ffab2e;
+    --amber-soft: rgba(255, 171, 46, 0.55);
+    --tick-dim: rgba(255, 255, 255, 0.20);
+    --tick-mid: rgba(255, 255, 255, 0.38);
+    --tick-strong: rgba(255, 255, 255, 0.62);
+    --chrome: rgba(255, 255, 255, 0.72);
+    --chrome-dim: rgba(255, 255, 255, 0.42);
+    --panel: rgba(20, 20, 22, 0.92);
+    --hairline: rgba(255, 255, 255, 0.12);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    overflow: hidden;
+    color: var(--chrome);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior: none;
+  }
+
+  /* ---------- Stage ---------- */
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  #face {
+    width: min(92vmin, 720px);
+    height: min(92vmin, 720px);
+    display: block;
+  }
+
+  /* sweep group rotates once per minute */
+  #sweep {
+    transform-box: view-box;
+    transform-origin: 500px 500px;
+    animation: sweep 60s linear infinite;
+  }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #sweep { animation: sweep 60s steps(60, end) infinite; }
+  }
+
+  /* Dot mode: drop the dial and the hand, keep only the travelling point */
+  body.dot #dial,
+  body.dot #hand,
+  body.dot #hub { opacity: 0; }
+
+  #dial, #hand, #hub, #tip, #glow { transition: opacity .6s ease; }
+
+  /* ---------- Chrome (auto-hiding) ---------- */
+  .chrome {
+    transition: opacity .5s ease;
+  }
+  body.hide-chrome .chrome { opacity: 0; pointer-events: none; }
+
+  #elapsed {
+    position: fixed;
+    top: max(18px, env(safe-area-inset-top));
+    left: 0; right: 0;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-weight: 300;
+    font-size: 15px;
+    letter-spacing: 0.28em;
+    color: var(--chrome-dim);
+    pointer-events: none;
+  }
+
+  /* gear / open-settings */
+  #open {
+    position: fixed;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    border: 1px solid var(--hairline);
+    background: rgba(255,255,255,0.04);
+    color: var(--chrome);
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+  #open svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+  /* ---------- Noting buttons ---------- */
+  #noting {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    display: none;
+    gap: 10px;
+    justify-content: center;
+    padding: 0 16px;
+  }
+  body.noting-on #noting { display: flex; }
+  body.noting-on.hide-chrome #noting { opacity: 0.9; pointer-events: auto; }
+
+  .note-btn {
+    min-width: 132px;
+    padding: 14px 26px 11px;
+    border-radius: 16px;
+    border: 1px solid var(--hairline);
+    background: rgba(255,255,255,0.035);
+    color: var(--chrome);
+    font: inherit;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: background .15s ease, transform .12s ease, border-color .15s ease;
+  }
+  .note-btn:active { transform: scale(0.97); }
+  .note-btn.flash { background: var(--amber); color: #1a1206; border-color: var(--amber); }
+  .note-btn .label { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .note-btn .count { font-size: 19px; font-weight: 300; font-variant-numeric: tabular-nums; color: var(--amber); }
+  .note-btn.flash .count { color: #1a1206; }
+
+  /* ---------- Settings panel ---------- */
+  #scrim {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    opacity: 0; pointer-events: none;
+    transition: opacity .35s ease;
+    z-index: 10;
+  }
+  body.panel-open #scrim { opacity: 1; pointer-events: auto; }
+
+  #panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 11;
+    background: var(--panel);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-top: 1px solid var(--hairline);
+    border-radius: 22px 22px 0 0;
+    padding: 10px 22px calc(24px + env(safe-area-inset-bottom));
+    transform: translateY(110%);
+    transition: transform .4s cubic-bezier(.22,.61,.36,1);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  body.panel-open #panel { transform: translateY(0); }
+
+  #grip { width: 38px; height: 4px; border-radius: 99px; background: var(--hairline); margin: 6px auto 18px; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .row:last-of-type { border-bottom: 0; }
+  .row .title { font-size: 16px; font-weight: 400; color: var(--chrome); }
+  .row .sub { font-size: 12.5px; color: var(--chrome-dim); margin-top: 3px; letter-spacing: 0.01em; }
+
+  /* segmented control */
+  .seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: 11px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: 0; background: transparent;
+    color: var(--chrome-dim);
+    font: inherit; font-size: 14px;
+    padding: 9px 18px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--amber); color: #1a1206; }
+
+  /* toggle switch */
+  .switch { position: relative; width: 50px; height: 30px; flex: none; cursor: pointer; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: 99px;
+    background: rgba(255,255,255,0.14);
+    transition: background .2s ease;
+  }
+  .switch .knob {
+    position: absolute; top: 3px; left: 3px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #f4f4f5;
+    transition: transform .2s ease;
+  }
+  .switch input:checked + .track { background: var(--amber); }
+  .switch input:checked + .track + .knob { transform: translateX(20px); }
+
+  .ghost-btn {
+    appearance: none; font: inherit; font-size: 14px;
+    background: transparent; color: var(--chrome-dim);
+    border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 9px 16px; cursor: pointer;
+  }
+  .ghost-btn:active { color: var(--chrome); }
+
+  #wakeNote { font-size: 12.5px; color: var(--chrome-dim); }
+  #wakeNote.warn { color: var(--amber); }
+</style>
 </head>
-<body>
-<div class="clock">
-  <div class="center">
-    <div class="graduation">
-      <div class="hold">
-        <div class="ms-1"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-2"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-3"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-4"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-5"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-6"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-7"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-8"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-9"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-10"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-11"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-12"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-13"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-14"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-15"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-16"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-17"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-18"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-19"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-20"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-21"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-22"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-23"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-24"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-25"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-26"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-27"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-28"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-29"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-30"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-31"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-32"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-33"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-34"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-35"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-36"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-37"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-38"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-39"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-40"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-41"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-42"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-43"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-44"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-45"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-46"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-47"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-48"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-49"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-50"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-51"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-52"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-53"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-54"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-55"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-56"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-57"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-58"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-59"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-60"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-61"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-62"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-63"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-64"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-65"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-66"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-67"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-68"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-69"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-70"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-71"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-72"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-73"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-74"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-75"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-76"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-77"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-78"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-79"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-80"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-81"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-82"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-83"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-84"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-85"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-86"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-87"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-88"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-89"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-90"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-91"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-92"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-93"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-94"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-95"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-96"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-97"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-98"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-99"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-100"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-101"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-102"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-103"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-104"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-105"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-106"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-107"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-108"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-109"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-110"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-111"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-112"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-113"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-114"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-115"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-116"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-117"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-118"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-119"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-120"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-121"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-122"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-123"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-124"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-125"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-126"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-127"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-128"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-129"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-130"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-131"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-132"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-133"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-134"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-135"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-136"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-137"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-138"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-139"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-140"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-141"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-142"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-143"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-144"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-145"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-146"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-147"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-148"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-149"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-150"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-151"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-152"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-153"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-154"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-155"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-156"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-157"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-158"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-159"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-160"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-161"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-162"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-163"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-164"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-165"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-166"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-167"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-168"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-169"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-170"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-171"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-172"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-173"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-174"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-175"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-176"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-177"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-178"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-179"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-180"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-181"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-182"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-183"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-184"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-185"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-186"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-187"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-188"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-189"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-190"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-191"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-192"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-193"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-194"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-195"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-196"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-197"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-198"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-199"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-200"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-201"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-202"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-203"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-204"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-205"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-206"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-207"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-208"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-209"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-210"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-211"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-212"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-213"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-214"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-215"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-216"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-217"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-218"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-219"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-220"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-221"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-222"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-223"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-224"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-225"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-226"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-227"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-228"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-229"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-230"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-231"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-232"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-233"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-234"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-235"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-236"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-237"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-238"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-239"></div>
-      </div>
-      <div class="hold">
-        <div class="ms-240"></div>
+<body class="hide-chrome noting-on">
+
+  <div id="stage">
+    <svg id="face" viewBox="0 0 1000 1000" aria-hidden="true">
+      <g id="dial"></g>
+      <circle id="hub" cx="500" cy="500" r="7" fill="var(--amber)"></circle>
+      <g id="sweep">
+        <line id="hand" x1="500" y1="500" x2="500" y2="112" stroke="var(--amber)" stroke-width="3" stroke-linecap="round"></line>
+        <circle id="glow" cx="500" cy="112" r="26" fill="var(--amber)" opacity="0.28" style="filter: blur(7px)"></circle>
+        <circle id="tip" cx="500" cy="112" r="9.5" fill="var(--amber)"></circle>
+      </g>
+    </svg>
+  </div>
+
+  <div id="elapsed" class="chrome">00:00</div>
+
+  <div id="noting" class="chrome">
+    <button class="note-btn" data-type="noted"><span class="count" id="c-noted">0</span><span class="label">Noted</span></button>
+  </div>
+
+  <button id="open" class="chrome" aria-label="Open settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
+  </button>
+
+  <div id="scrim"></div>
+  <div id="panel" role="dialog" aria-label="Settings">
+    <div id="grip"></div>
+
+    <div class="row">
+      <div>
+        <div class="title">Display</div>
+        <div class="sub">Full dial, or a single point to follow.</div>
+      </div>
+      <div class="seg" role="group" aria-label="Display mode">
+        <button id="mode-clock" aria-pressed="true">Clock</button>
+        <button id="mode-dot" aria-pressed="false">Dot</button>
       </div>
     </div>
-    <div class="w-second">
-      <div class="second"></div>
+
+    <div class="row">
+      <div>
+        <div class="title">Keep screen awake</div>
+        <div class="sub" id="wakeNote">On — your screen won't dim or lock.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="wakeToggle" checked>
+        <span class="track"></span><span class="knob"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="title">Log distractions</div>
+        <div class="sub">Tap when your mind wanders. The count is yours to review after.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="notingToggle" checked>
+        <span class="track"></span><span class="knob"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="title">Session</div>
+        <div class="sub" id="sessionSub">Running</div>
+      </div>
+      <button class="ghost-btn" id="resetBtn">Reset</button>
     </div>
   </div>
-</div>
-<script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
-<script src="js/index.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Build the dial: 240 ticks, every 4th brighter, every 20th tallest ---------- */
+  var dial = document.getElementById("dial");
+  var CX = 500, CY = 500, R = 442, parts = [];
+  for (var i = 1; i <= 240; i++) {
+    var isHour = i % 20 === 0;
+    var isMinute = i % 4 === 0;
+    var len, color, w;
+    if (isHour)        { len = 30; color = "var(--tick-strong)"; w = 3.2; }
+    else if (isMinute) { len = 18; color = "var(--tick-mid)";    w = 2.6; }
+    else               { len = 9;  color = "var(--tick-dim)";    w = 2.2; }
+    var a = (i * 1.5 - 90) * Math.PI / 180; // start at 12 o'clock, go clockwise
+    var cos = Math.cos(a), sin = Math.sin(a);
+    var x1 = CX + R * cos,        y1 = CY + R * sin;
+    var x2 = CX + (R - len) * cos, y2 = CY + (R - len) * sin;
+    parts.push('<line x1="' + x1.toFixed(2) + '" y1="' + y1.toFixed(2) +
+               '" x2="' + x2.toFixed(2) + '" y2="' + y2.toFixed(2) +
+               '" stroke="' + color + '" stroke-width="' + w + '" stroke-linecap="round"/>');
+  }
+  dial.innerHTML = parts.join("");
+
+  var body = document.body;
+
+  /* ---------- Display mode ---------- */
+  var mClock = document.getElementById("mode-clock");
+  var mDot = document.getElementById("mode-dot");
+  function setMode(dot) {
+    body.classList.toggle("dot", dot);
+    mClock.setAttribute("aria-pressed", String(!dot));
+    mDot.setAttribute("aria-pressed", String(dot));
+  }
+  mClock.addEventListener("click", function () { setMode(false); });
+  mDot.addEventListener("click", function () { setMode(true); });
+
+  /* ---------- Wake Lock ---------- */
+  var wakeLock = null, wakeWanted = true;
+  var wakeNote = document.getElementById("wakeNote");
+  var wakeToggle = document.getElementById("wakeToggle");
+
+  function setWakeNote(state) {
+    if (state === "on")        { wakeNote.textContent = "On — your screen won't dim or lock."; wakeNote.classList.remove("warn"); }
+    else if (state === "off")  { wakeNote.textContent = "Off — your screen may dim normally."; wakeNote.classList.remove("warn"); }
+    else                       { wakeNote.textContent = "Not available in this browser — keep the tab open and dimming may still occur."; wakeNote.classList.add("warn"); }
+  }
+
+  async function acquireWake() {
+    if (!("wakeLock" in navigator)) { setWakeNote("unsupported"); return; }
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", function () {
+        if (wakeWanted && document.visibilityState === "visible") { /* will re-acquire on visibilitychange */ }
+      });
+      setWakeNote("on");
+    } catch (e) {
+      setWakeNote("unsupported");
+    }
+  }
+  async function releaseWake() {
+    wakeWanted = false;
+    if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
+    setWakeNote("off");
+  }
+  wakeToggle.addEventListener("change", function () {
+    if (wakeToggle.checked) { wakeWanted = true; acquireWake(); }
+    else releaseWake();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (wakeWanted && document.visibilityState === "visible") acquireWake();
+  });
+  // Browsers often require a gesture; try on load and again on first touch.
+  acquireWake();
+  window.addEventListener("pointerdown", function once() {
+    if (wakeWanted && !wakeLock) acquireWake();
+    window.removeEventListener("pointerdown", once);
+  });
+
+  /* ---------- Distraction logging ---------- */
+  var notingToggle = document.getElementById("notingToggle");
+  var notedCount = 0;
+  var log = [];
+  var notedEl = document.getElementById("c-noted");
+
+  notingToggle.addEventListener("change", function () {
+    body.classList.toggle("noting-on", notingToggle.checked);
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll(".note-btn"), function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      notedCount++;
+      notedEl.textContent = notedCount;
+      log.push(elapsedSeconds);
+      btn.classList.add("flash");
+      setTimeout(function () { btn.classList.remove("flash"); }, 160);
+      poke();
+    });
+  });
+
+  /* ---------- Session timer ---------- */
+  var startTime = Date.now();
+  var elapsedSeconds = 0;
+  var elapsedEl = document.getElementById("elapsed");
+  function fmt(s) {
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    var mm = (h ? String(m).padStart(2, "0") : String(m));
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    return (h ? h + ":" + pad(m) : mm) + ":" + pad(sec);
+  }
+  setInterval(function () {
+    elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+    elapsedEl.textContent = fmt(elapsedSeconds);
+  }, 1000);
+
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    startTime = Date.now();
+    elapsedSeconds = 0;
+    elapsedEl.textContent = "00:00";
+    notedCount = 0;
+    log = [];
+    notedEl.textContent = "0";
+  });
+
+  /* ---------- Chrome show/hide + panel ---------- */
+  var open = document.getElementById("open");
+  var panel = document.getElementById("panel");
+  var scrim = document.getElementById("scrim");
+  var hideTimer = null;
+
+  function showChrome() {
+    body.classList.remove("hide-chrome");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () {
+      if (!body.classList.contains("panel-open")) body.classList.add("hide-chrome");
+    }, 4000);
+  }
+  function poke() { showChrome(); }
+
+  function openPanel() { body.classList.add("panel-open"); body.classList.remove("hide-chrome"); clearTimeout(hideTimer); }
+  function closePanel() { body.classList.remove("panel-open"); showChrome(); }
+
+  open.addEventListener("click", function (e) { e.stopPropagation(); openPanel(); });
+  scrim.addEventListener("click", closePanel);
+  panel.addEventListener("click", function (e) { e.stopPropagation(); });
+
+  // Tap empty space: reveal chrome, or dismiss panel if open.
+  document.getElementById("stage").addEventListener("click", function () {
+    if (body.classList.contains("panel-open")) { closePanel(); return; }
+    if (body.classList.contains("hide-chrome")) showChrome();
+    else body.classList.add("hide-chrome");
+  });
+
+  // Start hidden; one gentle reveal so controls are discoverable.
+  showChrome();
+})();
+</script>
 </body>
 </html>
